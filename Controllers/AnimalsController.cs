@@ -1,57 +1,120 @@
-﻿using APBD6.Models;
-using APBD6.Services;
+﻿using System.Data.SqlClient;
+using APBD6.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace APBD6.Controllers;
 
 [ApiController]
-[Route("animals")]
-public class AnimalsController : ControllerBase
+[Route("controller-animals")]
+public class StudentsController : ControllerBase
 {
 
-    private IMockDb _mockDb;
+    private readonly IConfiguration _configuration;
 
-    public AnimalsController(IMockDb mockDb)
+    public StudentsController(IConfiguration configuration)
     {
-        _mockDb = mockDb;
+        _configuration = configuration;
+    }
+
+    [HttpGet]
+    public IActionResult GetAllAnimals()
+    {
+        var response = new List<GetAnimalsResponse>();
+        using (var sqlConnection = new SqlConnection(_configuration.GetConnectionString("Default")))
+        {
+            var sqlCommand = new SqlCommand("SELECT * FROM Animal", sqlConnection);
+            sqlCommand.Connection.Open();
+            var reader = sqlCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                response.Add(new GetAnimalsResponse(
+                        reader.GetInt32(0), 
+                        reader.GetString(1), 
+                        reader.GetString(2), 
+                        reader.GetString(3), 
+                        reader.GetString(4)
+                    )
+                );
+            }
+        }
+        return Ok(response);
     }
     
-    [HttpGet]
-    public IActionResult GetAll()
-    {
-        return Ok(_mockDb.GetAll());
-    }
-
     [HttpGet("{id}")]
-    public IActionResult GetByID(int id)
+    public IActionResult GetAnimal(int id)
     {
-        return Ok();
-    }
+        using var sqlConnection = new SqlConnection(_configuration.GetConnectionString("Default"));
+        var sqlCommand = new SqlCommand("SELECT * FROM Animal WHERE ID = @1", sqlConnection);
+        sqlCommand.Parameters.AddWithValue("@1", id);
+        sqlCommand.Connection.Open();
 
+        var reader = sqlCommand.ExecuteReader();
+        if (!reader.Read()) return NotFound();
+
+        return Ok(new GetAnimalDetailsResponse(
+                reader.GetInt32(0), 
+                reader.GetString(1),
+                reader.GetString(2), 
+                reader.GetString(3), 
+                reader.GetString(4)
+            )
+        );
+    }
+    
     [HttpPost]
-    public IActionResult Add(Animal animal)
-    {   
-        //Sprawdzenie czy ID nie jest zajete => 409 (Conflict)
-        if (_mockDb.GetAll().FirstOrDefault(e => e.ID == animal.ID) is not null)
+    public IActionResult CreateAnimal(CreateAnimalRequest request)
+    {
+        using (var sqlConnection = new SqlConnection(_configuration.GetConnectionString("Default")))
         {
-            return Conflict();
+            var sqlCommand = new SqlCommand(
+                "INSERT INTO Animal (Name, Description, Category, Asrea) values (@1, @2, @3, @4); SELECT CAST(SCOPE_IDENTITY() as int)",
+                sqlConnection
+            );
+            sqlCommand.Parameters.AddWithValue("@1", request.Name);
+            sqlCommand.Parameters.AddWithValue("@2", request.Description);
+            sqlCommand.Parameters.AddWithValue("@3", request.Category);
+            sqlCommand.Parameters.AddWithValue("@4", request.Area);
+            sqlCommand.Connection.Open();
+            
+            var id = sqlCommand.ExecuteScalar();
+            
+            return Created($"students/{id}", new CreateAnimalResponse((int)id, request));
         }
-        
-        _mockDb.Add(animal);
-        return Created();
     }
-
+    
     [HttpPut("{id}")]
-    public IActionResult Replace(Animal animal, int id)
+    public IActionResult ReplaceAnimal(int id, ReplaceAnimalRequest request)
     {
-        _mockDb.Replace(animal, id);
-        return NoContent();
-    }
+        using (var sqlConnection = new SqlConnection(_configuration.GetConnectionString("Default")))
+        {
+            var sqlCommand = new SqlCommand(
+                "UPDATE Animal SET Name = @1, Descrition = @2, Category = @3, Area = @4 WHERE ID = @5",
+                sqlConnection
+            );
+            sqlCommand.Parameters.AddWithValue("@1", request.Name);
+            sqlCommand.Parameters.AddWithValue("@2", request.Description);
+            sqlCommand.Parameters.AddWithValue("@3", request.Category);
+            sqlCommand.Parameters.AddWithValue("@4", request.Area);
+            sqlCommand.Parameters.AddWithValue("@5", id);
+            sqlCommand.Connection.Open();
 
+            var affectedRows = sqlCommand.ExecuteNonQuery();
+            return affectedRows == 0 ? NotFound() : NoContent();
+        }
+    }
+    
     [HttpDelete("{id}")]
-    public IActionResult Delete(int id)
+    public IActionResult RemoveAnimal(int id)
     {
-        _mockDb.Delete(id);
-        return NoContent();
+        using (var sqlConnection = new SqlConnection(_configuration.GetConnectionString("Default")))
+        {
+            var command = new SqlCommand("DELETE FROM Animal WHERE ID = @1", sqlConnection);
+            command.Parameters.AddWithValue("@1", id);
+            command.Connection.Open();
+
+            var affectedRows = command.ExecuteNonQuery();
+
+            return affectedRows == 0 ? NotFound() : NoContent();
+        }
     }
 }

@@ -1,4 +1,7 @@
-using APBD6.Services;
+
+
+using APBD6.Endpoints;
+using APBD6.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,9 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<IMockDb, MockDb>();
 builder.Services.AddControllers();
-
+builder.Services.RegisterValidators();
 
 var app = builder.Build();
 
@@ -19,9 +21,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.MapControllers();
-app.UseHttpsRedirection();
 
+app.UseHttpsRedirection();
+app.RegisterStudentsEndpoints();
+app.MapControllers();
 
 
 app.Run();
